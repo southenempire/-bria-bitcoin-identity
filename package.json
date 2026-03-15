@@ -1,0 +1,29 @@
+{
+  "name": "bria",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0",
+    "vite-plugin-node-polyfills": "^0.25.0"
+  },
+  "dependencies": {
+    "@stacks/common": "^7.3.1",
+    "@stacks/connect": "^8.2.6",
+    "@stacks/network": "^7.3.1",
+    "@stacks/transactions": "^7.3.1",
+    "buffer": "^6.0.3"
+  }
+}
