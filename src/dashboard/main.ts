@@ -103,7 +103,7 @@ function setupWalletConnect() {
     const btn = document.getElementById('connectWallet') as HTMLButtonElement | null;
     if (!btn) return;
 
-    // Check if we have a stored address from a previous session
+    // Restore from session
     const storedAddr = localStorage.getItem('bria_stx_address');
     if (storedAddr) {
         btn.innerText = `${storedAddr.slice(0, 5)}...${storedAddr.slice(-4)}`;
@@ -112,7 +112,7 @@ function setupWalletConnect() {
     }
 
     btn.addEventListener('click', async () => {
-        // Already connected — disconnect
+        // Disconnect if already connected
         if (localStorage.getItem('bria_stx_address')) {
             localStorage.removeItem('bria_stx_address');
             btn.innerText = 'Connect Wallet';
@@ -124,63 +124,69 @@ function setupWalletConnect() {
 
         btn.innerText = 'Connecting...';
         btn.disabled = true;
+        logEvent('Looking for wallet...', 'system');
 
-        try {
-            // Poll for provider — Xverse may inject async after page load
-            const findProvider = async (): Promise<any> => {
-                for (let i = 0; i < 10; i++) {
-                    const p = (window as any).XverseProviders?.StacksProvider
-                           || (window as any).XverseProviders?.stacks
-                           || (window as any).StacksProvider
-                           || (window as any).LeatherProvider
-                           || (window as any).HiroWalletProvider;
-                    if (p) return p;
-                    await new Promise(r => setTimeout(r, 200));
-                }
-                return null;
-            };
-            const provider = await findProvider();
+        // Poll for provider (Xverse injects async)
+        let provider: any = null;
+        for (let i = 0; i < 15; i++) {
+            provider = (window as any).XverseProviders?.StacksProvider
+                    || (window as any).StacksProvider
+                    || (window as any).LeatherProvider;
+            if (provider) break;
+            await new Promise(r => setTimeout(r, 200));
+        }
 
-            if (provider) {
-                // Direct provider API — no popups needed
-                const resp = await provider.request('getAddresses', null).catch(async () => {
-                    // Fallback: some wallets use stx_getAccounts
-                    return provider.request('stx_getAccounts', {});
-                });
-
-                const addresses = resp?.result?.addresses || resp?.addresses || [];
-                const stacksAddr = addresses.find((a: any) =>
-                    a.symbol === 'STX' || a.address?.startsWith('S')
-                );
-
-                if (stacksAddr?.address) {
-                    const addr = stacksAddr.address;
-                    localStorage.setItem('bria_stx_address', addr);
-                    btn.innerText = `${addr.slice(0, 5)}...${addr.slice(-4)}`;
-                    btn.style.borderColor = '#ff9900';
-                    btn.style.color = '#ff9900';
-                    btn.disabled = false;
-                    logEvent(`✓ Connected: ${addr.slice(0, 8)}...`, 'system');
-                    return;
-                }
-            }
-
-            // 3) No extension found — show install prompt
-            logEvent('No wallet detected. Please install Xverse or Hiro Wallet.', 'error');
+        if (!provider) {
+            // No extension — open showConnect which handles wallet download flow
+            logEvent('No wallet extension found — opening Xverse download...', 'system');
+            window.open('https://www.xverse.app/download', '_blank');
             btn.innerText = 'Install Xverse →';
             btn.style.borderColor = '#ff4444';
             btn.style.color = '#ff4444';
-            window.open('https://www.xverse.app/download', '_blank');
             setTimeout(() => {
                 btn.innerText = 'Connect Wallet';
                 btn.style.borderColor = '';
                 btn.style.color = '';
                 btn.disabled = false;
             }, 3000);
+            return;
+        }
 
+        logEvent(`Wallet found — requesting access...`, 'system');
+
+        try {
+            // Xverse uses authenticationRequest (postMessage to extension)
+            // We use showConnect which internally calls provider.authenticationRequest
+            showConnect({
+                appDetails: {
+                    name: 'BRIA — Bitcoin Identity Registry',
+                    icon: `${window.location.origin}/favicon.ico`,
+                },
+                userSession,
+                onFinish: () => {
+                    const addr = userSession.loadUserData()?.profile?.stxAddress?.testnet
+                              || userSession.loadUserData()?.profile?.stxAddress?.mainnet
+                              || '';
+                    if (addr) {
+                        localStorage.setItem('bria_stx_address', addr);
+                        btn.innerText = `${addr.slice(0, 5)}...${addr.slice(-4)}`;
+                        btn.style.borderColor = '#ff9900';
+                        btn.style.color = '#ff9900';
+                        logEvent(`✓ Wallet connected: ${addr.slice(0, 8)}...`, 'system');
+                    }
+                    btn.disabled = false;
+                },
+                onCancel: () => {
+                    logEvent('Wallet connection cancelled.', 'system');
+                    btn.innerText = 'Connect Wallet';
+                    btn.style.borderColor = '';
+                    btn.style.color = '';
+                    btn.disabled = false;
+                },
+            });
         } catch (err: any) {
-            console.error('Wallet connect error:', err);
-            logEvent(`Wallet error: ${err?.message || 'Unknown error'}`, 'error');
+            console.error('showConnect error:', err);
+            logEvent(`Wallet error: ${err.message || 'Unknown'}`, 'error');
             btn.innerText = 'Connect Wallet';
             btn.style.borderColor = '';
             btn.style.color = '';
