@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // deploy-and-seed.mjs — Run: node deploy-and-seed.mjs
-import pkg from '@stacks/transactions';
-import { StacksTestnet } from '@stacks/network';
+import txPkg from '@stacks/transactions';
+import netPkg from '@stacks/network';
 import { readFileSync } from 'fs';
 import { randomBytes } from 'crypto';
 
@@ -14,15 +14,17 @@ const {
   bufferCV,
   AnchorMode,
   PostConditionMode,
-  TransactionVersion,
-} = pkg;
+} = txPkg;
 
-const NETWORK = new StacksTestnet({ url: 'https://api.testnet.hiro.so' });
+const { STACKS_TESTNET } = netPkg;
+const NETWORK = { ...STACKS_TESTNET, client: { baseUrl: 'https://api.testnet.hiro.so' } };
+
 const CLARITY_CONTRACT = readFileSync('./contracts/bria-registry.clar', 'utf8');
 
 // Use env var or generate fresh key
 const privateKey = process.env.DEPLOYER_KEY || randomBytes(32).toString('hex');
-const address = getAddressFromPrivateKey(privateKey, TransactionVersion.Testnet);
+const address = getAddressFromPrivateKey(privateKey, 'testnet');
+
 
 const DEMO_AGENTS = [
   {

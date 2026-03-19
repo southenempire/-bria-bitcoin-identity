@@ -10,8 +10,8 @@ import { BriaSDK } from './sdk/index';
 import { CLARITY_CONTRACT } from './contract-source';
 
 // ─── Configuration ─────────────────────────────────────────────────────────────
-// Update this after deploying the contract to testnet
-const REGISTRY_ADDRESS = 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM';
+// Deployed to Stacks Testnet — ST2H22XKBY041E5SX124HC7NJK2P09W1JPX6VYFBB.bria-registry
+const REGISTRY_ADDRESS = 'ST2H22XKBY041E5SX124HC7NJK2P09W1JPX6VYFBB';
 const REGISTRY_NAME = 'bria-registry';
 // Demo pubkey used when user doesn't provide one (33-byte compressed secp256k1)
 const DEMO_PUBKEY = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
@@ -126,11 +126,20 @@ function setupWalletConnect() {
         btn.disabled = true;
 
         try {
-            // 1) Try Xverse direct provider (SIP-030)
-            const xverseProvider = (window as any).XverseProviders?.StacksProvider;
-            // 2) Try Hiro/Leather provider
-            const hiroProvider = (window as any).StacksProvider || (window as any).LeatherProvider;
-            const provider = xverseProvider || hiroProvider;
+            // Poll for provider — Xverse may inject async after page load
+            const findProvider = async (): Promise<any> => {
+                for (let i = 0; i < 10; i++) {
+                    const p = (window as any).XverseProviders?.StacksProvider
+                           || (window as any).XverseProviders?.stacks
+                           || (window as any).StacksProvider
+                           || (window as any).LeatherProvider
+                           || (window as any).HiroWalletProvider;
+                    if (p) return p;
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                return null;
+            };
+            const provider = await findProvider();
 
             if (provider) {
                 // Direct provider API — no popups needed
