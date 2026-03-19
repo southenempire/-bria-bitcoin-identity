@@ -6,6 +6,7 @@ import { Buffer } from 'buffer';
 
 // ─── Official @stacks/connect v8 API (per docs.stacks.co/stacks-connect/connect-wallet) ───
 import { connect, disconnect, isConnected, getLocalStorage, request } from '@stacks/connect';
+import { stringAsciiCV, bufferCV, serializeCV } from '@stacks/transactions';
 import { BriaSDK } from './sdk/index';
 import { CLARITY_CONTRACT } from './contract-source';
 
@@ -247,14 +248,19 @@ async function startDashboard() {
         logEvent(`Registering "${name}" on-chain…`, 'network');
 
         try {
+            // Serialize Clarity values to hex — required by request() API
+            const serHex = (cv: any) => Buffer.from(serializeCV(cv)).toString('hex');
+            const imageUrl = 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?auto=format&fit=crop&w=400&q=80';
+            const pubKeyBuf = Buffer.from(pubKeyHex, 'hex');
+
             const res = await (request as any)('stx_callContract', {
                 contract: `${REGISTRY_ADDRESS}.${REGISTRY_NAME}`,
                 functionName: 'register-agent',
                 functionArgs: [
-                    { type: 'string-ascii', value: name },
-                    { type: 'string-ascii', value: desc },
-                    { type: 'string-ascii', value: 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?auto=format&fit=crop&w=400&q=80' },
-                    { type: 'buffer', value: pubKeyHex },
+                    serHex(stringAsciiCV(name.slice(0, 64))),
+                    serHex(stringAsciiCV(desc.slice(0, 256))),
+                    serHex(stringAsciiCV(imageUrl)),
+                    serHex(bufferCV(pubKeyBuf)),
                 ],
                 network: 'testnet',
             });
