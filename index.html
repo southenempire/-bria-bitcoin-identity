@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BRIA | Bitcoin Real-time Identity Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="/-bria-bitcoin-identity/assets/main-A7gMUhj0.js"></script>
+  <link rel="modulepreload" crossorigin href="/-bria-bitcoin-identity/assets/chunk-CFjPhJqf.js">
+  <link rel="modulepreload" crossorigin href="/-bria-bitcoin-identity/assets/preload-helper-A1oHjBm8.js">
+  <link rel="stylesheet" crossorigin href="/-bria-bitcoin-identity/assets/main-BQEJ_O84.css">
+</head>
+<body>
+    <div class="glow-container">
+        <div class="glow-orb" id="orb1"></div>
+        <div class="glow-orb" id="orb2"></div>
+    </div>
+
+    <header>
+        <nav>
+            <div class="logo">
+                <span class="logo-icon">▲</span>
+                <span class="logo-text">BRIA</span>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#gallery">Gallery</a></li>
+                <li><a href="#registry">Registry</a></li>
+                <li><a href="#docs">Docs</a></li>
+            </ul>
+            <button class="btn-connect" id="connectWallet">Connect Wallet</button>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero">
+            <h1>The <span class="gradient-text">Identity Layer</span> for Bitcoin Agents</h1>
+            <p>BRIA enables AI agents to establish verifiable reputation and identity on Bitcoin, powered by Stacks.</p>
+            <div class="hero-actions">
+                <a href="#registry" class="btn-primary">Register Agent</a>
+                <a href="#gallery" class="btn-secondary">Explore Gallery</a>
+            </div>
+        </section>
+
+        <section id="gallery" class="gallery">
+            <div class="section-header">
+                <h2>Verified Agents</h2>
+                <p>Discover autonomous agents active in the sBTC economy.</p>
+            </div>
+            <div class="agent-grid" id="agentGrid">
+                <!-- Agent cards will be injected here -->
+            </div>
+        </section>
+
+        <section id="registry" class="registry">
+            <div class="section-header">
+                <h2>Agent Registration</h2>
+                <p>Onboard your autonomous agent to the BRIA protocol.</p>
+            </div>
+            <div class="registration-container">
+                <form id="registrationForm" class="bria-form">
+                    <div class="form-group">
+                        <label for="agentName">Agent Name</label>
+                        <input type="text" id="agentName" placeholder="e.g. SatoshiBot" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="agentDesc">Short Description</label>
+                        <textarea id="agentDesc" placeholder="What does your agent do?" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="agentPubKey">Bitcoin Public Key (Hex)</label>
+                        <input type="text" id="agentPubKey" placeholder="02..." required>
+                    </div>
+                    <button type="submit" class="btn-primary full-width">Submit to Registry</button>
+                </form>
+            </div>
+        </section>
+
+        <section id="activity" class="activity">
+            <div class="section-header">
+                <h2>Network Activity</h2>
+                <p>Real-time blockchain events from the BRIA Identity Layer.</p>
+            </div>
+            <div class="log-container" id="activityLog">
+                <div class="log-entry system">Initializing BRIA Identity Layer...</div>
+            </div>
+        </section>
+
+        <section id="docs" class="docs">
+            <div class="section-header">
+                <h2>The Bitcoin Identity Protocol</h2>
+                <p>BRIA bridges AI agents to Bitcoin security via the Stacks L2.</p>
+            </div>
+            <div class="docs-grid">
+                <div class="doc-item">
+                    <div class="doc-icon">🛡️</div>
+                    <h3>Immutable Registry</h3>
+                    <p>Every agent identity is stored in a Clarity Smart Contract on Stacks. This ensures that an agent's reputation is decentralized and cannot be censored or deleted by any central authority.</p>
+                </div>
+                <div class="doc-item">
+                    <div class="doc-icon">🔑</div>
+                    <h3>Cryptographic Proof</h3>
+                    <p>Agents sign their registration with Bitcoin-derived private keys. This establishes a verifiable link between their on-chain identity and their autonomous actions in the digital economy.</p>
+                </div>
+                <div class="doc-item">
+                    <div class="doc-icon">📡</div>
+                    <h3>Recursive Discovery</h3>
+                    <p>The <code>bria-registry</code> contract acts as a global phonebook. Agents use the SDK to find other agents, facilitating autonomous service discovery and machine-to-machine coordination.</p>
+                </div>
+                <div class="doc-item">
+                    <div class="doc-icon">⚡</div>
+                    <h3>Real-time Resolution</h3>
+                    <p>Identity resolution happens in seconds. By using Stacks, we maintain the security of Bitcoin while achieving the performance needed for high-frequency agentic interactions.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 BRIA Protocol. Built for Stacks Buidl Battle #2.</p>
+    </footer>
+
+</body>
+</html>
