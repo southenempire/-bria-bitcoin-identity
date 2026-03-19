@@ -103,26 +103,80 @@ function setupWalletConnect() {
     const btn = document.getElementById('connectWallet') as HTMLButtonElement | null;
     if (!btn) return;
 
-    if (userSession.isSignInPending()) {
-        userSession.handlePendingSignIn().then(updateWalletButton);
-    } else {
-        updateWalletButton();
+    // Check if we have a stored address from a previous session
+    const storedAddr = localStorage.getItem('bria_stx_address');
+    if (storedAddr) {
+        btn.innerText = `${storedAddr.slice(0, 5)}...${storedAddr.slice(-4)}`;
+        btn.style.borderColor = '#ff9900';
+        btn.style.color = '#ff9900';
     }
 
-    btn.addEventListener('click', () => {
-        if (userSession.isUserSignedIn()) {
-            userSession.signUserOut();
-            updateWalletButton();
+    btn.addEventListener('click', async () => {
+        // Already connected — disconnect
+        if (localStorage.getItem('bria_stx_address')) {
+            localStorage.removeItem('bria_stx_address');
+            btn.innerText = 'Connect Wallet';
+            btn.style.borderColor = '';
+            btn.style.color = '';
             logEvent('Wallet disconnected.', 'system');
             return;
         }
-        logEvent('Opening wallet connection popup...', 'system');
-        showConnect({
-            appDetails: { name: 'BRIA — Bitcoin Identity Registry', icon: `${window.location.origin}${window.location.pathname}favicon.ico` },
-            userSession,
-            onFinish: () => { updateWalletButton(); logEvent('Wallet connected successfully! ✓', 'system'); },
-            onCancel: () => logEvent('Wallet connection cancelled.', 'system'),
-        });
+
+        btn.innerText = 'Connecting...';
+        btn.disabled = true;
+
+        try {
+            // 1) Try Xverse direct provider (SIP-030)
+            const xverseProvider = (window as any).XverseProviders?.StacksProvider;
+            // 2) Try Hiro/Leather provider
+            const hiroProvider = (window as any).StacksProvider || (window as any).LeatherProvider;
+            const provider = xverseProvider || hiroProvider;
+
+            if (provider) {
+                // Direct provider API — no popups needed
+                const resp = await provider.request('getAddresses', null).catch(async () => {
+                    // Fallback: some wallets use stx_getAccounts
+                    return provider.request('stx_getAccounts', {});
+                });
+
+                const addresses = resp?.result?.addresses || resp?.addresses || [];
+                const stacksAddr = addresses.find((a: any) =>
+                    a.symbol === 'STX' || a.address?.startsWith('S')
+                );
+
+                if (stacksAddr?.address) {
+                    const addr = stacksAddr.address;
+                    localStorage.setItem('bria_stx_address', addr);
+                    btn.innerText = `${addr.slice(0, 5)}...${addr.slice(-4)}`;
+                    btn.style.borderColor = '#ff9900';
+                    btn.style.color = '#ff9900';
+                    btn.disabled = false;
+                    logEvent(`✓ Connected: ${addr.slice(0, 8)}...`, 'system');
+                    return;
+                }
+            }
+
+            // 3) No extension found — show install prompt
+            logEvent('No wallet detected. Please install Xverse or Hiro Wallet.', 'error');
+            btn.innerText = 'Install Xverse →';
+            btn.style.borderColor = '#ff4444';
+            btn.style.color = '#ff4444';
+            window.open('https://www.xverse.app/download', '_blank');
+            setTimeout(() => {
+                btn.innerText = 'Connect Wallet';
+                btn.style.borderColor = '';
+                btn.style.color = '';
+                btn.disabled = false;
+            }, 3000);
+
+        } catch (err: any) {
+            console.error('Wallet connect error:', err);
+            logEvent(`Wallet error: ${err?.message || 'Unknown error'}`, 'error');
+            btn.innerText = 'Connect Wallet';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+            btn.disabled = false;
+        }
     });
 }
 
