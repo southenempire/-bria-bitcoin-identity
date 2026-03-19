@@ -9,190 +9,45 @@ import { stringAsciiCV, bufferCV } from '@stacks/transactions';
 import { BriaSDK } from './sdk/index';
 import { CLARITY_CONTRACT } from './contract-source';
 
-// ─── Configuration ─────────────────────────────────────────────────────────────
-// Deployed to Stacks Testnet — ST2H22XKBY041E5SX124HC7NJK2P09W1JPX6VYFBB.bria-registry
+// ─── Config ──────────────────────────────────────────────────────────────────
 const REGISTRY_ADDRESS = 'ST2H22XKBY041E5SX124HC7NJK2P09W1JPX6VYFBB';
 const REGISTRY_NAME = 'bria-registry';
-// Demo pubkey used when user doesn't provide one (33-byte compressed secp256k1)
 const DEMO_PUBKEY = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 
-// ─── Stacks Auth ───────────────────────────────────────────────────────────────
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 const appConfig = new AppConfig(['store_write', 'publish_data']);
 const userSession = new UserSession({ appConfig });
 
 interface Agent {
     name: string;
     description: string;
-    imageUrl: string;
     vouched: boolean;
     network: string;
     isLive?: boolean;
 }
 
-// ─── Rich mock/fallback agents (shown before contract is deployed) ──────────────
+// ─── Mock agents shown before contract is live ────────────────────────────────
 const MOCK_AGENTS: Agent[] = [
-    {
-        name: 'SatoshiBot',
-        description: 'Autonomous yield optimizer for sBTC markets. Executes covered calls and rebalances liquidity across Bitflow and Velar.',
-        imageUrl: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?auto=format&fit=crop&w=400&q=80',
-        vouched: true, network: 'Stacks'
-    },
-    {
-        name: 'BtcOracle',
-        description: 'Real-time Bitcoin consensus data aggregator. Provides signed price feeds to 14 DeFi protocols on Stacks.',
-        imageUrl: 'https://images.unsplash.com/photo-1518546305927-5a555bb7020d?auto=format&fit=crop&w=400&q=80',
-        vouched: true, network: 'Bitcoin'
-    },
-    {
-        name: 'StacksGuard',
-        description: 'Security watchdog agent that monitors Clarity contracts for anomalous call patterns and alerts protocol teams in real time.',
-        imageUrl: 'https://images.unsplash.com/photo-1614064641938-3bbee52942c7?auto=format&fit=crop&w=400&q=80',
-        vouched: true, network: 'Stacks'
-    },
-    {
-        name: 'RemitFlow',
-        description: 'Cross-border payment agent converting STX→USDCx→local fiat for NGN, KES and GHS corridors. Powered by Bitflow swaps.',
-        imageUrl: 'https://images.unsplash.com/photo-1580048915913-4f8f5cb481c4?auto=format&fit=crop&w=400&q=80',
-        vouched: false, network: 'Bitcoin'
-    },
-    {
-        name: 'ClarityScan',
-        description: 'Automated smart contract auditor. Detects reentrancy, integer overflow and access control issues in Clarity source code.',
-        imageUrl: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=400&q=80',
-        vouched: true, network: 'Stacks'
-    },
-    {
-        name: 'AgentMesh',
-        description: 'Service broker that matches agent-to-agent service requests and handles escrow settlements via smart contracts.',
-        imageUrl: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?auto=format&fit=crop&w=400&q=80',
-        vouched: false, network: 'Stacks'
-    },
+    { name: 'SatoshiBot', description: 'Autonomous yield optimizer for sBTC markets. Executes covered calls and rebalances liquidity across Bitflow and Velar.', vouched: true, network: 'Stacks' },
+    { name: 'BtcOracle', description: 'Real-time Bitcoin consensus data aggregator. Provides signed price feeds to 14 DeFi protocols on Stacks.', vouched: true, network: 'Bitcoin' },
+    { name: 'StacksGuard', description: 'Security watchdog agent monitoring Clarity contracts for anomalous call patterns and alerting protocol teams in real time.', vouched: true, network: 'Stacks' },
+    { name: 'RemitFlow', description: 'Cross-border payment agent converting STX→USDCx→local fiat for NGN, KES and GHS corridors via Bitflow swaps.', vouched: false, network: 'Bitcoin' },
+    { name: 'ClarityScan', description: 'Automated smart contract auditor detecting reentrancy, integer overflow and access control issues in Clarity source code.', vouched: true, network: 'Stacks' },
+    { name: 'AgentMesh', description: 'Service broker matching agent-to-agent service requests and handling escrow settlements via smart contracts.', vouched: false, network: 'Stacks' },
 ];
 
-// ─── Logging ───────────────────────────────────────────────────────────────────
+// ─── Log ─────────────────────────────────────────────────────────────────────
 function logEvent(message: string, type: 'system' | 'network' | 'error' = 'system') {
-    const logContent = document.getElementById('activityLog');
-    if (logContent) {
-        const entry = document.createElement('div');
-        entry.className = `log-entry ${type}`;
+    const logBox = document.getElementById('activityLog');
+    if (logBox) {
+        const line = document.createElement('div');
+        line.className = `log-line ${type}`;
         const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        entry.innerHTML = `<span class="timestamp">[${time}]</span> <span class="message">${message}</span>`;
-        logContent.appendChild(entry);
-        logContent.scrollTop = logContent.scrollHeight;
+        line.innerHTML = `<span class="timestamp">[${time}]</span> <span>${message}</span>`;
+        logBox.appendChild(line);
+        logBox.scrollTop = logBox.scrollHeight;
     }
     console.log(`BRIA [${type.toUpperCase()}]: ${message}`);
-}
-
-// ─── Wallet UI ────────────────────────────────────────────────────────────────
-function updateWalletButton() {
-    const btn = document.getElementById('connectWallet') as HTMLButtonElement | null;
-    if (!btn) return;
-    if (userSession.isUserSignedIn()) {
-        const addr = userSession.loadUserData()?.profile?.stxAddress?.testnet || '';
-        btn.innerText = addr ? `${addr.slice(0, 5)}...${addr.slice(-4)}` : 'Connected';
-        btn.style.borderColor = '#ff9900';
-        btn.style.color = '#ff9900';
-    } else {
-        btn.innerText = 'Connect Wallet';
-        btn.style.borderColor = '';
-        btn.style.color = '';
-    }
-}
-
-function setupWalletConnect() {
-    const btn = document.getElementById('connectWallet') as HTMLButtonElement | null;
-    if (!btn) return;
-
-    // Restore from session
-    const storedAddr = localStorage.getItem('bria_stx_address');
-    if (storedAddr) {
-        btn.innerText = `${storedAddr.slice(0, 5)}...${storedAddr.slice(-4)}`;
-        btn.style.borderColor = '#ff9900';
-        btn.style.color = '#ff9900';
-    }
-
-    btn.addEventListener('click', async () => {
-        // Disconnect if already connected
-        if (localStorage.getItem('bria_stx_address')) {
-            localStorage.removeItem('bria_stx_address');
-            btn.innerText = 'Connect Wallet';
-            btn.style.borderColor = '';
-            btn.style.color = '';
-            logEvent('Wallet disconnected.', 'system');
-            return;
-        }
-
-        btn.innerText = 'Connecting...';
-        btn.disabled = true;
-        logEvent('Looking for wallet...', 'system');
-
-        // Poll for provider (Xverse injects async)
-        let provider: any = null;
-        for (let i = 0; i < 15; i++) {
-            provider = (window as any).XverseProviders?.StacksProvider
-                    || (window as any).StacksProvider
-                    || (window as any).LeatherProvider;
-            if (provider) break;
-            await new Promise(r => setTimeout(r, 200));
-        }
-
-        if (!provider) {
-            // No extension — open showConnect which handles wallet download flow
-            logEvent('No wallet extension found — opening Xverse download...', 'system');
-            window.open('https://www.xverse.app/download', '_blank');
-            btn.innerText = 'Install Xverse →';
-            btn.style.borderColor = '#ff4444';
-            btn.style.color = '#ff4444';
-            setTimeout(() => {
-                btn.innerText = 'Connect Wallet';
-                btn.style.borderColor = '';
-                btn.style.color = '';
-                btn.disabled = false;
-            }, 3000);
-            return;
-        }
-
-        logEvent(`Wallet found — requesting access...`, 'system');
-
-        try {
-            // Xverse uses authenticationRequest (postMessage to extension)
-            // We use showConnect which internally calls provider.authenticationRequest
-            showConnect({
-                appDetails: {
-                    name: 'BRIA — Bitcoin Identity Registry',
-                    icon: `${window.location.origin}/favicon.ico`,
-                },
-                userSession,
-                onFinish: () => {
-                    const addr = userSession.loadUserData()?.profile?.stxAddress?.testnet
-                              || userSession.loadUserData()?.profile?.stxAddress?.mainnet
-                              || '';
-                    if (addr) {
-                        localStorage.setItem('bria_stx_address', addr);
-                        btn.innerText = `${addr.slice(0, 5)}...${addr.slice(-4)}`;
-                        btn.style.borderColor = '#ff9900';
-                        btn.style.color = '#ff9900';
-                        logEvent(`✓ Wallet connected: ${addr.slice(0, 8)}...`, 'system');
-                    }
-                    btn.disabled = false;
-                },
-                onCancel: () => {
-                    logEvent('Wallet connection cancelled.', 'system');
-                    btn.innerText = 'Connect Wallet';
-                    btn.style.borderColor = '';
-                    btn.style.color = '';
-                    btn.disabled = false;
-                },
-            });
-        } catch (err: any) {
-            console.error('showConnect error:', err);
-            logEvent(`Wallet error: ${err.message || 'Unknown'}`, 'error');
-            btn.innerText = 'Connect Wallet';
-            btn.style.borderColor = '';
-            btn.style.color = '';
-            btn.disabled = false;
-        }
-    });
 }
 
 // ─── Agent rendering ──────────────────────────────────────────────────────────
@@ -203,27 +58,96 @@ function renderAgents(agents: Agent[], agentGrid: HTMLElement, statusText: HTMLE
         card.className = `agent-card${agent.isLive ? ' live-agent' : ''}`;
         const networkLower = agent.network.toLowerCase().replace('...', 'pending');
         card.innerHTML = `
-            <div class="agent-image" style="background-image:url('${agent.imageUrl}');background-size:cover;height:200px;border-radius:16px;margin-bottom:1.5rem;position:relative;">
-                ${agent.isLive ? '<div class="live-badge">🟢 LIVE</div>' : ''}
-            </div>
-            <div class="agent-info">
-                <h3>${agent.name}</h3>
-                <p>${agent.description}</p>
-                <div class="agent-badges">
-                    ${agent.vouched ? '<span class="badge verified">✓ Verified</span>' : ''}
-                    <span class="badge ${networkLower}">${agent.network}</span>
-                </div>
+            ${agent.isLive ? '<div class="live-indicator"><span class="live-dot"></span>LIVE · TESTNET</div>' : ''}
+            <div class="agent-name">${agent.name}</div>
+            <div class="agent-desc">${agent.description}</div>
+            <div class="agent-tags">
+                ${agent.vouched ? '<span class="tag verified">✓ Verified</span>' : ''}
+                <span class="tag ${networkLower}">${agent.network}</span>
             </div>`;
         agentGrid.appendChild(card);
     });
-
     if (isLiveData) {
-        statusText.innerHTML = `🟢 <strong>${agents.filter(a => a.isLive).length} Live Agents</strong> on Stacks Testnet`;
-        statusText.style.color = '#00ff88';
+        statusText.innerHTML = `<span style="color:var(--green)">●</span> ${agents.filter(a => a.isLive).length} live agents on Stacks Testnet`;
     }
 }
 
-// ─── Main dashboard ────────────────────────────────────────────────────────────
+// ─── Wallet ──────────────────────────────────────────────────────────────────
+function setupWalletConnect() {
+    const btn = document.getElementById('connectWallet') as HTMLButtonElement | null;
+    if (!btn) return;
+
+    const storedAddr = localStorage.getItem('bria_stx_address');
+    if (storedAddr) {
+        btn.innerText = `${storedAddr.slice(0, 5)}...${storedAddr.slice(-4)}`;
+        btn.style.background = 'var(--orange-dim)';
+    }
+
+    btn.addEventListener('click', async () => {
+        if (localStorage.getItem('bria_stx_address')) {
+            localStorage.removeItem('bria_stx_address');
+            btn.innerText = 'Connect Wallet';
+            btn.style.background = '';
+            logEvent('Wallet disconnected.', 'system');
+            return;
+        }
+
+        btn.innerText = 'Connecting...';
+        btn.disabled = true;
+        logEvent('Detecting wallet...', 'system');
+
+        // Poll for provider — Xverse injects async
+        let provider: any = null;
+        for (let i = 0; i < 15; i++) {
+            provider = (window as any).XverseProviders?.StacksProvider
+                    || (window as any).StacksProvider
+                    || (window as any).LeatherProvider;
+            if (provider) break;
+            await new Promise(r => setTimeout(r, 200));
+        }
+
+        if (!provider) {
+            logEvent('No wallet detected — open Xverse to install.', 'error');
+            window.open('https://www.xverse.app/download', '_blank');
+            btn.innerText = 'Install Xverse →';
+            setTimeout(() => { btn.innerText = 'Connect Wallet'; btn.style.background = ''; btn.disabled = false; }, 3000);
+            return;
+        }
+
+        logEvent('Wallet found — requesting access...', 'system');
+
+        try {
+            showConnect({
+                appDetails: { name: 'BRIA — Bitcoin Identity Registry', icon: `${window.location.origin}/favicon.ico` },
+                userSession,
+                onFinish: () => {
+                    const addr = userSession.loadUserData()?.profile?.stxAddress?.testnet
+                              || userSession.loadUserData()?.profile?.stxAddress?.mainnet || '';
+                    if (addr) {
+                        localStorage.setItem('bria_stx_address', addr);
+                        btn.innerText = `${addr.slice(0, 5)}...${addr.slice(-4)}`;
+                        btn.style.background = 'var(--orange-dim)';
+                        logEvent(`✓ Connected: ${addr.slice(0, 10)}...`, 'system');
+                    }
+                    btn.disabled = false;
+                },
+                onCancel: () => {
+                    logEvent('Connection cancelled.', 'system');
+                    btn.innerText = 'Connect Wallet';
+                    btn.style.background = '';
+                    btn.disabled = false;
+                },
+            });
+        } catch (err: any) {
+            logEvent(`Wallet error: ${err.message || 'Unknown'}`, 'error');
+            btn.innerText = 'Connect Wallet';
+            btn.style.background = '';
+            btn.disabled = false;
+        }
+    });
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 async function startDashboard() {
     const sdk = new BriaSDK('testnet', REGISTRY_ADDRESS, REGISTRY_NAME);
 
@@ -232,89 +156,83 @@ async function startDashboard() {
 
     const statusText = document.createElement('div');
     statusText.id = 'networkStatus';
-    statusText.style.cssText = 'font-size:0.9rem;color:#ff9900;margin-bottom:2rem;font-weight:bold;';
-    statusText.innerText = '📡 Connecting to Stacks Testnet...';
+    statusText.style.cssText = 'font-family:var(--mono);font-size:0.78rem;color:var(--text-muted);margin-bottom:1.5rem;';
+    statusText.innerText = '○ Connecting to Stacks Testnet...';
     agentGrid.parentElement?.insertBefore(statusText, agentGrid);
 
-    let agents: Agent[] = MOCK_AGENTS;
-    renderAgents(agents, agentGrid, statusText, false);
+    renderAgents(MOCK_AGENTS, agentGrid, statusText, false);
 
     async function discoverAgents() {
-        logEvent('Querying BRIA Registry on Stacks...', 'network');
+        logEvent('Querying bria-registry on Stacks Testnet...', 'network');
         try {
             const total = await sdk.getTotalAgents();
-            logEvent(`Registry reports ${total} registered agents.`, 'system');
+            logEvent(`Registry: ${total} agents registered.`, 'system');
 
-            // Update stats banner
             const statEl = document.getElementById('statAgents');
-            if (statEl) statEl.innerText = total > 0 ? String(total) : '0';
+            if (statEl) statEl.innerText = String(total);
 
             if (total > 0) {
                 const liveAgents: Agent[] = [];
                 for (let i = 1; i <= total; i++) {
                     const profile = await sdk.getAgentById(i);
                     if (profile) {
-                        logEvent(`✓ Resolved identity: ${profile.name}`, 'system');
-                        liveAgents.push({ name: profile.name, description: profile.description, imageUrl: profile.imageUrl, vouched: profile.vouched, network: 'Stacks', isLive: true });
+                        logEvent(`✓ Resolved: ${profile.name}`, 'system');
+                        liveAgents.push({ name: profile.name, description: profile.description, vouched: profile.vouched, network: 'Stacks', isLive: true });
                     }
                 }
                 const localAgents: Agent[] = JSON.parse(localStorage.getItem('bria_pending_agents') || '[]');
-                agents = [...localAgents, ...liveAgents];
-                renderAgents(agents, agentGrid, statusText, true);
+                renderAgents([...localAgents, ...liveAgents], agentGrid, statusText, true);
             } else {
-                logEvent('Registry empty — showing curated demo agents.', 'system');
-                statusText.innerText = '🟡 Testnet Live. Deploy contract to populate registry.';
-                const localAgents: Agent[] = JSON.parse(localStorage.getItem('bria_pending_agents') || '[]');
-                agents = [...localAgents, ...MOCK_AGENTS];
-                renderAgents(agents, agentGrid, statusText, false);
+                logEvent('Registry empty — showing demo agents.', 'system');
+                statusText.innerHTML = '○ Testnet live · deploy contract to populate registry';
+                const local: Agent[] = JSON.parse(localStorage.getItem('bria_pending_agents') || '[]');
+                renderAgents([...local, ...MOCK_AGENTS], agentGrid, statusText, false);
             }
-        } catch (_err) {
-            logEvent('Registry query failed — showing demo agents.', 'error');
-            statusText.innerText = '🔴 Registry unreachable — showing demo agents.';
+        } catch {
+            logEvent('Registry unreachable — showing demo agents.', 'error');
+            statusText.innerText = '✗ Registry unreachable · showing demo data';
             renderAgents(MOCK_AGENTS, agentGrid, statusText, false);
         }
     }
 
     discoverAgents().catch(() => {});
 
-    // ─── Deploy Contract button ───────────────────────────────────────────────
+    // ─── Deploy button ────────────────────────────────────────────────────────
     const deployBtn = document.getElementById('deployContract');
     if (deployBtn) {
         deployBtn.addEventListener('click', () => {
-            if (!userSession.isUserSignedIn()) {
-                logEvent('Connect your wallet first to deploy the contract.', 'error');
+            if (!userSession.isUserSignedIn() && !localStorage.getItem('bria_stx_address')) {
+                logEvent('Connect wallet first to deploy.', 'error');
                 return;
             }
-            logEvent('Opening wallet to deploy bria-registry contract...', 'network');
+            logEvent('Opening wallet to deploy bria-registry...', 'network');
             showContractDeploy({
                 contractName: REGISTRY_NAME,
                 codeBody: CLARITY_CONTRACT,
                 network: 'testnet',
-                appDetails: { name: 'BRIA — Bitcoin Identity Registry', icon: `${window.location.origin}${window.location.pathname}favicon.ico` },
+                appDetails: { name: 'BRIA — Bitcoin Identity Registry', icon: `${window.location.origin}/favicon.ico` },
                 userSession,
                 onFinish: (data: any) => {
-                    logEvent(`Contract deployed! TXID: ${data.txId?.substring(0, 10)}... Update REGISTRY_ADDRESS in code.`, 'system');
-                    (deployBtn as HTMLButtonElement).innerText = 'Contract Deployed ✓';
-                    (deployBtn as HTMLButtonElement).style.background = 'linear-gradient(135deg, #00ff88 0%, #00aa66 100%)';
+                    logEvent(`✓ Deployed! TXID: ${data.txId?.slice(0, 12)}...`, 'system');
+                    (deployBtn as HTMLButtonElement).innerText = 'Deployed ✓';
                 },
-                onCancel: () => logEvent('Contract deployment cancelled.', 'system'),
+                onCancel: () => logEvent('Deploy cancelled.', 'system'),
             });
         });
     }
 
-    // ─── Registration form ─────────────────────────────────────────────────────
-    const registrationForm = document.getElementById('registrationForm') as HTMLFormElement | null;
-    if (registrationForm) {
-        registrationForm.addEventListener('submit', async (e) => {
+    // ─── Registration form ────────────────────────────────────────────────────
+    const form = document.getElementById('registrationForm') as HTMLFormElement | null;
+    if (form) {
+        form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const submitBtn = registrationForm.querySelector('button[type="submit"]') as HTMLButtonElement;
-            const originalText = submitBtn.innerText;
+            const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+            const orig = submitBtn.innerText;
 
-            if (!userSession.isUserSignedIn()) {
-                logEvent('Please connect your wallet first!', 'error');
-                submitBtn.innerText = 'Connect Wallet First!';
-                submitBtn.style.background = '#ff4444';
-                setTimeout(() => { submitBtn.innerText = originalText; submitBtn.style.background = ''; }, 2500);
+            if (!userSession.isUserSignedIn() && !localStorage.getItem('bria_stx_address')) {
+                logEvent('Connect your wallet first.', 'error');
+                submitBtn.innerText = 'Connect wallet first';
+                setTimeout(() => { submitBtn.innerText = orig; }, 2500);
                 return;
             }
 
@@ -327,33 +245,29 @@ async function startDashboard() {
             submitBtn.disabled = true;
             logEvent(`Registering "${name}" on-chain...`, 'network');
 
-            const pubKeyBytes = Buffer.from(pubKeyHex, 'hex');
-
             showContractCall({
                 contractAddress: REGISTRY_ADDRESS,
                 contractName: REGISTRY_NAME,
                 functionName: 'register-agent',
-                functionArgs: [stringAsciiCV(name), stringAsciiCV(desc), stringAsciiCV(imageUrl), bufferCV(pubKeyBytes)],
+                functionArgs: [stringAsciiCV(name), stringAsciiCV(desc), stringAsciiCV(imageUrl), bufferCV(Buffer.from(pubKeyHex, 'hex'))],
                 network: 'testnet',
-                appDetails: { name: 'BRIA — Bitcoin Identity Registry', icon: `${window.location.origin}${window.location.pathname}favicon.ico` },
+                appDetails: { name: 'BRIA — Bitcoin Identity Registry', icon: `${window.location.origin}/favicon.ico` },
                 userSession,
                 onFinish: (data: { txId: string }) => {
-                    logEvent(`✓ Registered! TXID: ${data.txId.substring(0, 10)}...`, 'system');
-                    const pending: Agent = { name, description: desc, imageUrl, vouched: false, network: 'Pending...' };
+                    logEvent(`✓ Registered! TXID: ${data.txId.slice(0, 12)}...`, 'system');
+                    const pending: Agent = { name, description: desc, vouched: false, network: 'Pending...' };
                     const local: Agent[] = JSON.parse(localStorage.getItem('bria_pending_agents') || '[]');
                     local.unshift(pending);
                     localStorage.setItem('bria_pending_agents', JSON.stringify(local));
-                    submitBtn.innerText = 'Registered! ✓';
-                    submitBtn.style.background = 'linear-gradient(135deg, #00ff88 0%, #00aa66 100%)';
-                    submitBtn.disabled = false;
-                    setTimeout(async () => { registrationForm.reset(); submitBtn.innerText = originalText; submitBtn.style.background = ''; await discoverAgents(); document.getElementById('gallery')?.scrollIntoView({ behavior: 'smooth' }); }, 3000);
+                    submitBtn.innerText = 'Registered ✓';
+                    setTimeout(() => { form.reset(); submitBtn.innerText = orig; submitBtn.disabled = false; discoverAgents(); }, 3000);
                 },
-                onCancel: () => { logEvent('Transaction cancelled.', 'system'); submitBtn.innerText = originalText; submitBtn.style.background = ''; submitBtn.disabled = false; },
+                onCancel: () => { logEvent('Transaction cancelled.', 'system'); submitBtn.innerText = orig; submitBtn.disabled = false; },
             });
         });
     }
 
-    // Smooth scrolling
+    // Smooth scroll
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (this: HTMLAnchorElement, e: Event) {
             e.preventDefault();
