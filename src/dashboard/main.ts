@@ -4,8 +4,7 @@ import { Buffer } from 'buffer';
 (window as any).global = window;
 (window as any).process = { env: {} };
 
-import { showConnect, showContractCall, AppConfig, UserSession, isStacksWalletInstalled } from '@stacks/connect';
-import type { FinishedTxData } from '@stacks/connect';
+import { showConnect, showContractCall, AppConfig, UserSession } from '@stacks/connect';
 import { stringAsciiCV, bufferCV } from '@stacks/transactions';
 import { BriaSDK } from './sdk/index';
 
@@ -78,19 +77,6 @@ function setupWalletConnect() {
             return;
         }
 
-        if (!isStacksWalletInstalled()) {
-            logEvent('No Stacks wallet detected — install Hiro Wallet or Leather to continue.', 'error');
-            connectBtn.innerText = 'Install Hiro Wallet →';
-            connectBtn.style.borderColor = '#ff4444';
-            connectBtn.style.color = '#ff4444';
-            window.open('https://wallet.hiro.so', '_blank');
-            setTimeout(() => {
-                connectBtn.innerText = 'Connect Wallet';
-                connectBtn.style.borderColor = '';
-                connectBtn.style.color = '';
-            }, 3000);
-            return;
-        }
 
         logEvent('Opening wallet connection popup...', 'system');
         showConnect({
@@ -251,7 +237,7 @@ async function startDashboard() {
                     icon: window.location.origin + '/-bria-bitcoin-identity/favicon.ico',
                 },
                 userSession,
-                onFinish: (data: FinishedTxData) => {
+                onFinish: (data: { txId: string }) => {
                     logEvent(`Tx broadcasted! TXID: ${data.txId.substring(0, 10)}...`, 'system');
                     const pending: Agent = { name, description: desc, imageUrl, vouched: false, network: 'Pending...' };
                     const local: Agent[] = JSON.parse(localStorage.getItem('bria_pending_agents') || '[]');
