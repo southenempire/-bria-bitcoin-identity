@@ -26,12 +26,11 @@ export class BriaSDK {
   private contractName: string;
 
   constructor(networkType: 'mainnet' | 'testnet' = 'testnet', contractAddress: string, contractName: string = 'bria-registry') {
-    // Explicitly construct the network object to match StacksNetwork type
-    const baseUrl = networkType === 'mainnet' 
-      ? 'https://stacks-node-api.mainnet.stacks.co' 
-      : 'https://stacks-node-api.testnet.stacks.co';
-    
-    // Low-level network configuration for Stacks
+    // Use Hiro's hosted API — no SSL issues
+    const baseUrl = networkType === 'mainnet'
+      ? 'https://api.hiro.so'
+      : 'https://api.testnet.hiro.so';
+
     this.network = {
       chainId: networkType === 'mainnet' ? 1 : 2147483648,
       transactionVersion: networkType === 'mainnet' ? 0x00 : 0x80,
@@ -46,7 +45,7 @@ export class BriaSDK {
         baseUrl: baseUrl,
       }
     };
-    
+
     this.contractAddress = contractAddress;
     this.contractName = contractName;
   }
@@ -61,7 +60,6 @@ export class BriaSDK {
         network: this.network,
         senderAddress: agentAddress,
       });
-
       const jsonResult: any = cvToJSON(result);
       if (jsonResult.value) {
         return {
@@ -109,7 +107,6 @@ export class BriaSDK {
         network: this.network as any,
         senderAddress: this.contractAddress,
       });
-
       const jsonResult: any = cvToJSON(result);
       if (jsonResult.value) {
         return {
@@ -128,10 +125,7 @@ export class BriaSDK {
     }
   }
 
-  async registerAgent(
-    senderKey: string,
-    profile: Omit<AgentProfile, 'vouched' | 'createdAt'>
-  ) {
+  async registerAgent(senderKey: string, profile: Omit<AgentProfile, 'vouched' | 'createdAt'>) {
     const transaction = await makeContractCall({
       contractAddress: this.contractAddress,
       contractName: this.contractName,
@@ -144,9 +138,8 @@ export class BriaSDK {
       ],
       senderKey: senderKey as any,
       network: this.network as any,
-      postConditionMode: 0x01, // Allow
+      postConditionMode: 0x01,
     } as any);
-
     const response = await broadcastTransaction({ transaction });
     return response;
   }
