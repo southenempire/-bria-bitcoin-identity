@@ -4,9 +4,18 @@ import { Buffer } from 'buffer';
 (window as any).global = window;
 (window as any).process = { env: {} };
 
+import { showConnect, showContractCall, AppConfig, UserSession, FinishedTxData } from '@stacks/connect';
+import { stringAsciiCV, bufferCV, uintCV } from '@stacks/transactions';
 import { BriaSDK, AgentProfile } from './sdk/index';
 
 console.log('BRIA: Script loaded');
+
+// --- Stacks Auth Setup ---
+const appConfig = new AppConfig(['store_write', 'publish_data']);
+const userSession = new UserSession({ appConfig });
+
+const REGISTRY_ADDRESS = 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM';
+const REGISTRY_NAME = 'bria-registry';
 
 interface Agent {
     name: string;
@@ -18,13 +27,9 @@ interface Agent {
 
 async function startDashboard() {
     console.log('BRIA: Dashboard Initialization Started');
-    
-    // Initialize Production SDK
-    const sdk = new BriaSDK(
-        'testnet',
-        'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM', // Registry Address
-        'bria-registry'
-    );
+
+    // Initialize Production SDK (read-only queries)
+    const sdk = new BriaSDK('testnet', REGISTRY_ADDRESS, REGISTRY_NAME);
 
     // Mock Fallback Data (for demo if node is empty)
     const mockAgents: Agent[] = [
@@ -46,7 +51,7 @@ async function startDashboard() {
 
     let agents: Agent[] = [...mockAgents];
     const agentGrid = document.getElementById('agentGrid');
-    
+
     if (!agentGrid) {
         console.error('BRIA: agentGrid not found in DOM');
         return;
@@ -60,6 +65,56 @@ async function startDashboard() {
     statusText.style.fontWeight = 'bold';
     statusText.innerText = '📡 Connecting to Stacks Testnet...';
     agentGrid.parentElement?.insertBefore(statusText, agentGrid);
+
+    // --- Wallet Connect ---
+    const connectBtn = document.getElementById('connectWallet') as HTMLButtonElement | null;
+
+    function updateWalletButton() {
+        if (!connectBtn) return;
+        if (userSession.isUserSignedIn()) {
+            const userData = userSession.loadUserData();
+            const addr = userData.profile?.stxAddress?.testnet || userData.profile?.stxAddress?.mainnet || '';
+            const short = addr ? `${addr.slice(0, 5)}...${addr.slice(-4)}` : 'Connected';
+            connectBtn.innerText = short;
+            connectBtn.style.borderColor = '#ff9900';
+            connectBtn.style.color = '#ff9900';
+        } else {
+            connectBtn.innerText = 'Connect Wallet';
+            connectBtn.style.borderColor = '';
+            connectBtn.style.color = '';
+        }
+    }
+
+    // Restore session on load
+    if (userSession.isSignInPending()) {
+        await userSession.handlePendingSignIn();
+    }
+    updateWalletButton();
+
+    if (connectBtn) {
+        connectBtn.addEventListener('click', () => {
+            if (userSession.isUserSignedIn()) {
+                userSession.signUserOut();
+                updateWalletButton();
+                logEvent('Wallet disconnected.', 'system');
+                return;
+            }
+            showConnect({
+                appDetails: {
+                    name: 'BRIA — Bitcoin Identity Registry',
+                    icon: window.location.origin + '/favicon.ico',
+                },
+                userSession,
+                onFinish: () => {
+                    updateWalletButton();
+                    logEvent('Wallet connected successfully!', 'system');
+                },
+                onCancel: () => {
+                    logEvent('Wallet connection cancelled.', 'system');
+                },
+            });
+        });
+    }
 
     function renderAgents() {
         console.log(`BRIA: Rendering ${agents.length} agents`);
@@ -101,7 +156,7 @@ async function startDashboard() {
             logEvent('Querying Stacks Registry (getTotalAgents)...', 'network');
             const total = await sdk.getTotalAgents();
             logEvent(`Stacks node reported ${total} agents in registry.`, 'system');
-            
+
             if (total > 0) {
                 statusText.innerText = `🟢 Connected: ${total} Agents Discovered on Stacks.`;
                 const discovered: Agent[] = [];
@@ -145,63 +200,97 @@ async function startDashboard() {
     // Initial Discovery
     discoverAgents();
 
-    // Registration Form Logic
+    // --- Registration Form — Signs via Hiro/Leather Wallet ---
     const registrationForm = document.getElementById('registrationForm') as HTMLFormElement;
     if (registrationForm) {
         registrationForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const submitBtn = registrationForm.querySelector('button[type="submit"]') as HTMLButtonElement;
             const originalText = submitBtn.innerText;
-            
-            submitBtn.innerText = 'Broadcasting to Stacks...';
-            submitBtn.disabled = true;
+
+            if (!userSession.isUserSignedIn()) {
+                logEvent('Please connect your wallet first!', 'error');
+                submitBtn.innerText = 'Connect Wallet First!';
+                submitBtn.style.background = '#ff4444';
+                setTimeout(() => {
+                    submitBtn.innerText = originalText;
+                    submitBtn.style.background = '';
+                }, 2500);
+                return;
+            }
 
             const name = (document.getElementById('agentName') as HTMLInputElement).value;
             const desc = (document.getElementById('agentDesc') as HTMLTextAreaElement).value;
             const pubKeyHex = (document.getElementById('agentPubKey') as HTMLInputElement).value;
-            const privKey = (document.getElementById('agentKey') as HTMLInputElement).value;
+
+            if (!pubKeyHex || pubKeyHex.length < 66) {
+                logEvent('Invalid Bitcoin public key — must be 33-byte hex (66 chars).', 'error');
+                return;
+            }
+
+            submitBtn.innerText = 'Waiting for wallet...';
+            submitBtn.disabled = true;
+
+            logEvent(`Initiating on-chain registration for "${name}"...`, 'network');
+            logEvent('Opening wallet to sign transaction...', 'system');
 
             try {
-                logEvent(`Initiating on-chain registration for "${name}"...`, 'network');
-                logEvent('Signing transaction with Bitcoin private key...', 'system');
-                
-                const response = await sdk.registerAgent(privKey, {
-                    name,
-                    description: desc,
-                    imageUrl: 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?auto=format&fit=crop&w=400&q=80',
-                    publicKey: Buffer.from(pubKeyHex.replace('0x', ''), 'hex')
+                const pubKeyBytes = Buffer.from(pubKeyHex.replace('0x', ''), 'hex');
+                const imageUrl = 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?auto=format&fit=crop&w=400&q=80';
+
+                showContractCall({
+                    contractAddress: REGISTRY_ADDRESS,
+                    contractName: REGISTRY_NAME,
+                    functionName: 'register-agent',
+                    functionArgs: [
+                        stringAsciiCV(name),
+                        stringAsciiCV(desc),
+                        stringAsciiCV(imageUrl),
+                        bufferCV(pubKeyBytes),
+                    ],
+                    network: 'testnet',
+                    appDetails: {
+                        name: 'BRIA — Bitcoin Identity Registry',
+                        icon: window.location.origin + '/favicon.ico',
+                    },
+                    userSession,
+                    onFinish: (data: FinishedTxData) => {
+                        const txid = data.txId;
+                        logEvent(`Registration broadcasted! TXID: ${txid.substring(0, 10)}...`, 'system');
+
+                        // Optimistic UI — show pending agent immediately
+                        const pendingAgent: Agent = {
+                            name,
+                            description: desc,
+                            imageUrl,
+                            vouched: false,
+                            network: 'Pending...'
+                        };
+                        const localAgents = JSON.parse(localStorage.getItem('bria_pending_agents') || '[]');
+                        localAgents.unshift(pendingAgent);
+                        localStorage.setItem('bria_pending_agents', JSON.stringify(localAgents));
+
+                        submitBtn.innerText = 'Tx Broadcasted! ✓';
+                        submitBtn.style.background = 'linear-gradient(135deg, #00ff88 0%, #00aa66 100%)';
+                        submitBtn.disabled = false;
+
+                        setTimeout(async () => {
+                            registrationForm.reset();
+                            submitBtn.innerText = originalText;
+                            submitBtn.style.background = '';
+                            await discoverAgents();
+                            document.getElementById('gallery')?.scrollIntoView({ behavior: 'smooth' });
+                        }, 3000);
+                    },
+                    onCancel: () => {
+                        logEvent('Transaction signing cancelled by user.', 'system');
+                        submitBtn.innerText = originalText;
+                        submitBtn.style.background = '';
+                        submitBtn.disabled = false;
+                    },
                 });
-
-                logEvent(`Registration broadcasted successfully! TXID: ${response.txid.substring(0, 10)}...`, 'system');
-
-                // OPTIMISTIC UI: Save to local storage so it shows up while pending
-                const pendingAgent: Agent = {
-                    name,
-                    description: desc,
-                    imageUrl: 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?auto=format&fit=crop&w=400&q=80',
-                    vouched: false,
-                    network: 'Pending...'
-                };
-                
-                const localAgents = JSON.parse(localStorage.getItem('bria_pending_agents') || '[]');
-                localAgents.unshift(pendingAgent);
-                localStorage.setItem('bria_pending_agents', JSON.stringify(localAgents));
-                
-                submitBtn.innerText = 'Success! Tx Broadcasted';
-                submitBtn.style.background = 'linear-gradient(135deg, #00ff88 0%, #00aa66 100%)';
-                
-                setTimeout(async () => {
-                    registrationForm.reset();
-                    submitBtn.innerText = originalText;
-                    submitBtn.style.background = '';
-                    submitBtn.disabled = false;
-                    
-                    await discoverAgents();
-                    document.getElementById('gallery')?.scrollIntoView({ behavior: 'smooth' });
-                }, 3000);
-
             } catch (error) {
-                logEvent('Blockchain registration rejected by network.', 'error');
+                logEvent('Blockchain registration failed.', 'error');
                 console.error('BRIA: Registration Failed', error);
                 submitBtn.innerText = 'Registration Failed';
                 submitBtn.style.background = '#ff4444';
@@ -211,19 +300,6 @@ async function startDashboard() {
                     submitBtn.disabled = false;
                 }, 3000);
             }
-        });
-    }
-
-    // Wallet Connection Simulation
-    const connectBtn = document.getElementById('connectWallet');
-    if (connectBtn) {
-        connectBtn.addEventListener('click', () => {
-            connectBtn.innerText = 'Connecting...';
-            setTimeout(() => {
-                connectBtn.innerText = 'SP12...ABCD';
-                (connectBtn as HTMLButtonElement).style.borderColor = '#ff9900';
-                (connectBtn as HTMLButtonElement).style.color = '#ff9900';
-            }, 1500);
         });
     }
 
